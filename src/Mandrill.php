@@ -1,18 +1,37 @@
 <?php
 
+namespace Mandrill;
 
-require_once 'Mandrill_Templates.php';
-require_once 'Mandrill_Exports.php';
-require_once 'Mandrill_Users.php';
-require_once 'Mandrill_Rejects.php';
-require_once 'Mandrill_Inbound.php';
-require_once 'Mandrill_Tags.php';
-require_once 'Mandrill_Messages.php';
-require_once 'Mandrill_Whitelists.php';
-require_once 'Mandrill_Internal.php';
-require_once 'Mandrill_Urls.php';
-require_once 'Mandrill_Webhooks.php';
-require_once 'Mandrill_Senders.php';
+use Mandrill\Exceptions\Error;
+use Mandrill\Exceptions\Invalid_CustomDNS;
+use Mandrill\Exceptions\Invalid_CustomDNSPending;
+use Mandrill\Exceptions\Invalid_DeleteDefaultPool;
+use Mandrill\Exceptions\Invalid_DeleteNonEmptyPool;
+use Mandrill\Exceptions\Invalid_EmptyDefaultPool;
+use Mandrill\Exceptions\Invalid_Key;
+use Mandrill\Exceptions\Invalid_Reject;
+use Mandrill\Exceptions\Invalid_Tag_Name;
+use Mandrill\Exceptions\Invalid_Template;
+use Mandrill\Exceptions\IP_ProvisionLimit;
+use Mandrill\Exceptions\Metadata_FieldLimit;
+use Mandrill\Exceptions\NoSendingHistory;
+use Mandrill\Exceptions\PaymentRequired;
+use Mandrill\Exceptions\PoorReputation;
+use Mandrill\Exceptions\ServiceUnavailable;
+use Mandrill\Exceptions\Unknown_Export;
+use Mandrill\Exceptions\Unknown_InboundDomain;
+use Mandrill\Exceptions\Unknown_InboundRoute;
+use Mandrill\Exceptions\Unknown_IP;
+use Mandrill\Exceptions\Unknown_Message;
+use Mandrill\Exceptions\Unknown_MetadataField;
+use Mandrill\Exceptions\Unknown_Pool;
+use Mandrill\Exceptions\Unknown_Sender;
+use Mandrill\Exceptions\Unknown_Subaccount;
+use Mandrill\Exceptions\Unknown_Template;
+use Mandrill\Exceptions\Unknown_TrackingDomain;
+use Mandrill\Exceptions\Unknown_Url;
+use Mandrill\Exceptions\Unknown_Webhook;
+use Mandrill\Exceptions\ValidationError;
 
 class Mandrill
 {
@@ -23,31 +42,46 @@ class Mandrill
   public $debug = false;
 
   public static $error_map = [
-    "ValidationError" => Mandrill_ValidationError::class,
-    "Invalid_Key" => Mandrill_Invalid_Key::class,
-    "PaymentRequired" => Mandrill_PaymentRequired::class,
-    "Unknown_Template" => Mandrill_Unknown_Template::class,
-    "ServiceUnavailable" => Mandrill_ServiceUnavailable::class,
-    "Unknown_Message" => Mandrill_Unknown_Message::class,
-    "Invalid_Tag_Name" => Mandrill_Invalid_Tag_Name::class,
-    "Invalid_Reject" => Mandrill_Invalid_Reject::class,
-    "Unknown_Sender" => Mandrill_Unknown_Sender::class,
-    "Unknown_Url" => Mandrill_Unknown_Url::class,
-    "Invalid_Template" => Mandrill_Invalid_Template::class,
-    "Unknown_Webhook" => Mandrill_Unknown_Webhook::class,
-    "Unknown_InboundDomain" => Mandrill_Unknown_InboundDomain::class,
-    "Unknown_Export" => Mandrill_Unknown_Export::class,
+    "ValidationError" => ValidationError::class,
+    "Invalid_Key" => Invalid_Key::class,
+    "PaymentRequired" => PaymentRequired::class,
+    "Unknown_Subaccount" => Unknown_Subaccount::class,
+    "Unknown_Template" => Unknown_Template::class,
+    "ServiceUnavailable" => ServiceUnavailable::class,
+    "Unknown_Message" => Unknown_Message::class,
+    "Invalid_Tag_Name" => Invalid_Tag_Name::class,
+    "Invalid_Reject" => Invalid_Reject::class,
+    "Unknown_Sender" => Unknown_Sender::class,
+    "Unknown_Url" => Unknown_Url::class,
+    "Unknown_TrackingDomain" => Unknown_TrackingDomain::class,
+    "Invalid_Template" => Invalid_Template::class,
+    "Unknown_Webhook" => Unknown_Webhook::class,
+    "Unknown_InboundDomain" => Unknown_InboundDomain::class,
+    "Unknown_InboundRoute" => Unknown_InboundRoute::class,
+    "Unknown_Export" => Unknown_Export::class,
+    "IP_ProvisionLimit" => IP_ProvisionLimit::class,
+    "Unknown_Pool" => Unknown_Pool::class,
+    "NoSendingHistory" => NoSendingHistory::class,
+    "PoorReputation" => PoorReputation::class,
+    "Unknown_IP" => Unknown_IP::class,
+    "Invalid_EmptyDefaultPool" => Invalid_EmptyDefaultPool::class,
+    "Invalid_DeleteDefaultPool" => Invalid_DeleteDefaultPool::class,
+    "Invalid_DeleteNonEmptyPool" => Invalid_DeleteNonEmptyPool::class,
+    "Invalid_CustomDNS" => Invalid_CustomDNS::class,
+    "Invalid_CustomDNSPending" => Invalid_CustomDNSPending::class,
+    "Metadata_FieldLimit" => Metadata_FieldLimit::class,
+    "Unknown_MetadataField" => Unknown_MetadataField::class,
   ];
 
   public function __construct($apikey = null)
   {
     if (!$apikey) $apikey = getenv('MANDRILL_APIKEY');
     if (!$apikey) $apikey = $this->readConfigs();
-    if (!$apikey) throw new Mandrill_Error('You must provide a Mandrill API key');
+    if (!$apikey) throw new Error('You must provide a Mandrill API key');
     $this->apikey = $apikey;
 
     $this->ch = curl_init();
-    curl_setopt($this->ch, CURLOPT_USERAGENT, 'Mandrill-PHP/1.0.43');
+    curl_setopt($this->ch, CURLOPT_USERAGENT, 'Mandrill-PHP/1.0.55');
     curl_setopt($this->ch, CURLOPT_POST, true);
     curl_setopt($this->ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($this->ch, CURLOPT_HEADER, false);
@@ -58,18 +92,21 @@ class Mandrill
 
     $this->root = rtrim($this->root, '/') . '/';
 
-    $this->templates = new Mandrill_Templates($this);
-    $this->exports = new Mandrill_Exports($this);
-    $this->users = new Mandrill_Users($this);
-    $this->rejects = new Mandrill_Rejects($this);
-    $this->inbound = new Mandrill_Inbound($this);
-    $this->tags = new Mandrill_Tags($this);
-    $this->messages = new Mandrill_Messages($this);
-    $this->whitelists = new Mandrill_Whitelists($this);
-    $this->internal = new Mandrill_Internal($this);
-    $this->urls = new Mandrill_Urls($this);
-    $this->webhooks = new Mandrill_Webhooks($this);
-    $this->senders = new Mandrill_Senders($this);
+    $this->templates = new Templates($this);
+    $this->exports = new Exports($this);
+    $this->users = new Users($this);
+    $this->rejects = new Rejects($this);
+    $this->inbound = new Inbound($this);
+    $this->tags = new Tags($this);
+    $this->messages = new Messages($this);
+    $this->whitelists = new Whitelists($this);
+    $this->ips = new Ips($this);
+    $this->internal = new Internal($this);
+    $this->subaccounts = new Subaccounts($this);
+    $this->urls = new Urls($this);
+    $this->webhooks = new Webhooks($this);
+    $this->senders = new Senders($this);
+    $this->metadata = new Metadata($this);
   }
 
   public function __destruct()
@@ -77,6 +114,12 @@ class Mandrill
     curl_close($this->ch);
   }
 
+  /**
+   * @param $url
+   * @param $params
+   * @return mixed
+   * @throws Error
+   */
   public function call($url, $params)
   {
     $params['key'] = $this->apikey;
@@ -107,10 +150,10 @@ class Mandrill
     $this->log('Got response: ' . $response_body);
 
     if (curl_error($ch)) {
-      throw new Mandrill_HttpError("API call to $url failed: " . curl_error($ch));
+      throw new _HttpError("API call to $url failed: " . curl_error($ch));
     }
     $result = json_decode($response_body, true);
-    if ($result === null) throw new Mandrill_Error('We were unable to decode the JSON response from the Mandrill API: ' . $response_body);
+    if ($result === null) throw new Error('We were unable to decode the JSON response from the Mandrill API: ' . $response_body);
 
     if (floor($info['http_code'] / 100) >= 4) {
       throw $this->castError($result);
@@ -131,11 +174,16 @@ class Mandrill
     return false;
   }
 
+  /**
+   * @param $result
+   * @return Error|mixed
+   * @throws Error
+   */
   public function castError($result)
   {
-    if ($result['status'] !== 'error' || !$result['name']) throw new Mandrill_Error('We received an unexpected error: ' . json_encode($result));
+    if ($result['status'] !== 'error' || !$result['name']) throw new Error('We received an unexpected error: ' . json_encode($result));
 
-    $class = (isset(self::$error_map[$result['name']])) ? self::$error_map[$result['name']] : Mandrill_Error::class;
+    $class = (isset(self::$error_map[$result['name']])) ? self::$error_map[$result['name']] : Error::class;
     return new $class($result['message'], $result['code']);
   }
 
